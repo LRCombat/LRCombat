@@ -2,6 +2,7 @@ from flask import Flask
 from pybit.unified_trading import HTTP
 import time
 import pandas as pd
+import threading
 
 app = Flask(__name__)
 
@@ -26,7 +27,7 @@ def get_candles():
         )
         candles = response['result']['list']
         df = pd.DataFrame(candles, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', '_1', '_2'
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'  # Corrigido aqui
         ])
         df['close'] = df['close'].astype(float)
         return df
@@ -57,6 +58,5 @@ def home():
 
 # === Início do robô e do servidor Flask ===
 if __name__ == '__main__':
-    import threading
     threading.Thread(target=executar_robo).start()
     app.run(host='0.0.0.0', port=3000)
