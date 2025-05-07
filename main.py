@@ -27,36 +27,74 @@ def get_candles():
         )
         candles = response['result']['list']
         df = pd.DataFrame(candles, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'  # Corrigido aqui
+            'timestamp', 'open', 'high', 'low', 'close', 'volume'
         ])
-        df['close'] = df['close'].astype(float)
+        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
         return df
     except Exception as e:
-        print(f"Erro ao pegar velas: {e}. Tentando novamente em 10 segundos...")
+        print(f"Erro ao pegar velas: {e}. Tentando novamente em 10s...")
         time.sleep(10)
         return get_candles()
 
-# === Função principal do robô ===
+# === Cálculo dos indicadores ===
+def calcular_indicadores(df):
+    df['EMA20'] = df['close'].ewm(span=20).mean()
+    df['EMA50'] = df['close'].ewm(span=50).mean()
+    delta = df['close'].diff()
+    ganho = delta.where(delta > 0, 0)
+    perda = -delta.where(delta < 0, 0)
+    media_ganho = ganho.rolling(14).mean()
+    media_perda = perda.rolling(14).mean()
+    rs = media_ganho / media_perda
+    df['RSI'] = 100 - (100 / (1 + rs))
+    df['volume_ma'] = df['volume'].rolling(20).mean()
+    return df
+
+# === Lógica do robô ===
+def verificar_sinal(df):
+    ultima = df.iloc[-1]
+    anterior = df.iloc[-2]
+
+    # Condições para Compra
+    if (ultima['EMA20'] > ultima['EMA50'] and
+        anterior['EMA20'] <= anterior['EMA50'] and
+        ultima['RSI'] > 50 and
+        ultima['volume'] > ultima['volume_ma']):
+        return "COMPRA"
+
+    # Condições para Venda
+    elif (ultima['EMA20'] < ultima['EMA50'] and
+          anterior['EMA20'] >= anterior['EMA50'] and
+          ultima['RSI'] < 50 and
+          ultima['volume'] > ultima['volume_ma']):
+        return "VENDA"
+
+    return None
+
+# === Execução principal do robô ===
 def executar_robo():
     while True:
         try:
             print("🔄 Verificando sinal...")
             df = get_candles()
-            if df is not None:
-                ultima = df.iloc[-1]
-                print(f"Último fechamento: {ultima['close']}")
-                # Aqui entra sua lógica de sinal, compra, venda, etc.
-            time.sleep(60)  # Espera 1 minuto antes de verificar novamente
+            df = calcular_indicadores(df)
+            sinal = verificar_sinal(df)
+            if sinal:
+                print(f"🚀 SINAL DETECTADO: {sinal}")
+                # Aqui você pode integrar ordens reais ou simulações
+            else:
+                print("❌ Nenhum sinal agora.")
+            time.sleep(60)  # Espera 1 minuto
         except Exception as e:
             print(f"[ERRO] {e}")
             time.sleep(15)
 
-# === Rota para manter o Render.com ativo ===
+# === Rota para manter ativo no Render ===
 @app.route('/')
 def home():
-    return 'Robô rodando com sucesso!'
+    return 'GoldenTrendBot PRO rodando!'
 
-# === Início do robô e do servidor Flask ===
+# === Início do robô + servidor Flask ===
 if __name__ == '__main__':
     threading.Thread(target=executar_robo).start()
     app.run(host='0.0.0.0', port=3000)
