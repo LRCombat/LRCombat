@@ -40,6 +40,8 @@ def get_candles():
 def calcular_indicadores(df):
     df['EMA20'] = df['close'].ewm(span=20).mean()
     df['EMA50'] = df['close'].ewm(span=50).mean()
+    
+    # Cálculo do RSI
     delta = df['close'].diff()
     ganho = delta.where(delta > 0, 0)
     perda = -delta.where(delta < 0, 0)
@@ -47,7 +49,21 @@ def calcular_indicadores(df):
     media_perda = perda.rolling(14).mean()
     rs = media_ganho / media_perda
     df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # Média móvel de volume
     df['volume_ma'] = df['volume'].rolling(20).mean()
+    
+    # Cálculo do MACD (Moving Average Convergence Divergence)
+    df['EMA12'] = df['close'].ewm(span=12).mean()
+    df['EMA26'] = df['close'].ewm(span=26).mean()
+    df['MACD'] = df['EMA12'] - df['EMA26']
+    df['MACD_signal'] = df['MACD'].ewm(span=9).mean()
+
+    # Cálculo do ADX (Average Directional Index)
+    df['plus_di'] = 100 * (df['high'].diff().where(df['high'].diff() > df['low'].diff(), 0) / df['close']).rolling(14).mean()
+    df['minus_di'] = 100 * (df['low'].diff().where(df['low'].diff() > df['high'].diff(), 0) / df['close']).rolling(14).mean()
+    df['ADX'] = 100 * (df['plus_di'] - df['minus_di']).abs() / (df['plus_di'] + df['minus_di'])
+    
     return df
 
 # === Lógica do robô ===
@@ -59,14 +75,18 @@ def verificar_sinal(df):
     if (ultima['EMA20'] > ultima['EMA50'] and
         anterior['EMA20'] <= anterior['EMA50'] and
         ultima['RSI'] > 50 and
-        ultima['volume'] > ultima['volume_ma']):
+        ultima['volume'] > ultima['volume_ma'] and
+        ultima['MACD'] > ultima['MACD_signal'] and
+        ultima['ADX'] > 20):
         return "COMPRA"
 
     # Condições para Venda
     elif (ultima['EMA20'] < ultima['EMA50'] and
           anterior['EMA20'] >= anterior['EMA50'] and
           ultima['RSI'] < 50 and
-          ultima['volume'] > ultima['volume_ma']):
+          ultima['volume'] > ultima['volume_ma'] and
+          ultima['MACD'] < ultima['MACD_signal'] and
+          ultima['ADX'] > 20):
         return "VENDA"
 
     return None
